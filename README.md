@@ -35,7 +35,7 @@ This is a demo of threat dtection and unattended baggage tracking using YOLOv4s 
     pip install -r requirements.txt
     ```
 2. Create the optimized model by running the notebook cells at `convert.ipynb` to convert the model to OpenVINO format. **(IMPORTANT)**
-2. Run the cell at `main.ipynb` to run the demo. _(Make sure to change the video path to your supported video source)_
+2. Run the cell at `demo.ipynb` to run the demo. _(Make sure to change the video path to your supported video source)_
     
 _Note: Demo won't work without creating the optimized model._
 
