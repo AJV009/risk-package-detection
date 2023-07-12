@@ -1,22 +1,27 @@
-import cv2
-import numpy as np
+# Py imports
 import os
 import threading
 import time
-import torch
 import urllib.parse
 from typing import Dict, Tuple
 from os import PathLike
 from pathlib import Path
+from datetime import datetime
+
+# Third party imports
+import cv2
+import torch
+import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow.compat.v1 as tf
-
+from scipy.optimize import linear_sum_assignment
 from openvino.runtime import Model
 from ultralytics.yolo.utils import ops
-from ultralytics.yolo.utils.plotting import colors
+from ultralytics.yolo.utils.plotting import colors as ucolors
 
-from deepSort import preprocessing
-from deepSort.detection import Detection
+# Local imports
+from deepSORT import preprocessing
+from deepSORT.detection import Detection
 
 # write a simple function that take any input and saves it to a file like log.txt
 def log_output(output):
@@ -268,7 +273,28 @@ def postprocess(
         results.append({"det": pred[:, :6].numpy(), "segment": segments})
     return results
 
-def draw_results(results:Dict, source_image:np.ndarray, label_map:Dict, deepsort_config:Dict):
+def clip_bbox(bbox, image_shape):
+    """
+    Clip the bounding box coordinates to ensure they fall within the image boundaries.
+    
+    Parameters:
+        bbox (tuple): Bounding box coordinates (x1, y1, x2, y2).
+        image_shape (tuple): Shape of the image (height, width).
+
+    Returns:
+        tuple: Clipped bounding box coordinates (x1, y1, x2, y2).
+    """
+    h, w = image_shape[:2]
+    x1, y1, x2, y2 = bbox
+
+    x1 = max(0, min(x1, w))
+    y1 = max(0, min(y1, h))
+    x2 = max(0, min(x2, w))
+    y2 = max(0, min(y2, h))
+
+    return (x1, y1, x2, y2)
+
+def process_results(results:Dict, source_image:np.ndarray, label_map:Dict, deepsort_config:Dict):
     """
     Helper function for drawing bounding boxes on image
     Parameters:
@@ -290,7 +316,10 @@ def draw_results(results:Dict, source_image:np.ndarray, label_map:Dict, deepsort
     track_classes = deepsort_config["track_classes"]
     threat_classes = deepsort_config["threat_classes"]
 
+    alert = []
+
     for idx, (*xyxy, conf, lbl) in enumerate(boxes):
+        xyxy = clip_bbox(xyxy, source_image.shape)
         if label_map[int(lbl)] in track_classes and conf > 0.45:
             objects.append({"object": idx, "xyxy": xyxy, "label": label_map[int(lbl)], "print_label": f'{label_map[int(lbl)]} {conf:.2f}', "confidence": conf})
 
@@ -301,7 +330,8 @@ def draw_results(results:Dict, source_image:np.ndarray, label_map:Dict, deepsort
         elif label_map[int(lbl)] in threat_classes and conf > 0.45:
             # single box plotter
             label = f'{label_map[int(lbl)]} {conf:.2f}'
-            source_image = plot_one_box(xyxy, source_image, label=label, color=colors(int(lbl)), line_thickness=1)
+            source_image = plot_one_box(xyxy, source_image, label=label, color=ucolors(int(lbl)), line_thickness=1)
+            alert.append(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Threat {label_map[int(lbl)]} detected")
     
     # tracker feed
     encoder = deepsort_config["encoder"]
@@ -325,19 +355,81 @@ def draw_results(results:Dict, source_image:np.ndarray, label_map:Dict, deepsort
     tracker.predict()
     tracker.update(detections)
 
+    # store confident tracks for further processing
+    confident_tracks = []
+
     # update tracks (use plot_one_box)
     for track in tracker.tracks:
         if not track.is_confirmed() or track.time_since_update > 1:
             continue
-        bbox = track.to_tlbr()
-        class_name = track.get_class()
         color = colors[int(track.track_id) % len(colors)]
-        color = [i * 255 for i in color]
-        color = tuple(color)
-        label = f'{class_name} {track.track_id}'
-        source_image = plot_one_box(bbox, source_image, label=label, color=color, line_thickness=1)
+        track_data = {
+            'bbox': track.to_tlbr(),
+            'color': tuple([i * 255 for i in color]),
+            'label': f'{track.get_class()} {track.track_id}',
+        }
+        confident_tracks.append(track_data)
+        source_image = plot_one_box(track_data["bbox"], source_image, label=track_data["label"], color=track_data["color"], line_thickness=1)
 
-    return source_image
+    return source_image, confident_tracks, alert
+
+def get_center(bbox):
+    # Get the center point of the bounding box
+    x1, y1, x2, y2 = bbox
+    return (int((x1 + x2) / 2), int((y1 + y2) / 2))
+
+def get_distance(center1, center2):
+    # Calculate Euclidean distance between two points
+    return np.sqrt((center1[0]-center2[0])**2 + (center1[1]-center2[1])**2)
+
+def track_risk(frame, deepsort_config, relation_history, confident_tracks):
+
+    # Separate people and objects
+    people_tracks = [track for track in confident_tracks if track['label'].startswith('person')]
+    object_tracks = [track for track in confident_tracks if track['label'].startswith(tuple(deepsort_config['baggage_classes']))]
+
+    # Initialize cost matrix with size max(len(people_tracks), len(object_tracks))
+    num_people = len(people_tracks)
+    num_objects = len(object_tracks)
+    cost_matrix = np.full((num_people, num_objects), np.inf)
+
+    # Calculate the cost for each potential pair
+    for i, person in enumerate(people_tracks):
+        for j, obj in enumerate(object_tracks):
+            center_person = get_center(person['bbox'])
+            center_object = get_center(obj['bbox'])
+            cost_matrix[i][j] = get_distance(center_person, center_object)
+
+    alert = None
+    alert_config = deepsort_config['alert_config']['unattended_bag']
+    # Use linear_sum_assignment to solve the assignment problem
+    if num_people > 0 and num_objects > 0:  # Make sure we have both people and objects
+        person_indices, object_indices = linear_sum_assignment(cost_matrix)
+        # Create pairs
+        for person_index, object_index in zip(person_indices, object_indices):
+            center_person = get_center(people_tracks[person_index]['bbox'])
+            center_object = get_center(object_tracks[object_index]['bbox'])
+            # pairs.append((people_tracks[person_index], object_tracks[object_index], time.time()))
+            dist = np.sqrt((center_person[0]-center_object[0])**2 + (center_person[1]-center_object[1])**2)
+            temp_pair = (people_tracks[person_index]['label'], object_tracks[object_index]['label'])
+            if temp_pair not in relation_history:
+                relation_history[temp_pair] = {
+                    'distance': dist,
+                    'last_seen': time.time()
+                }
+            else:
+                current_time = time.time()
+                pixel_distance_percent = alert_config['pixel_distance_percent']
+                alert_duration = alert_config['alert_duration']
+                # log_output("relation_distance: "+str(relation_history[temp_pair]['distance']))
+                # log_output("Diff calc: "+str(pixel_distance_percent * frame.shape[1]))
+                if (current_time - relation_history[temp_pair]['last_seen'] > alert_duration) or (relation_history[temp_pair]['distance'] > pixel_distance_percent * frame.shape[1]):
+                    alert = f'{datetime.now()}: Unattended bag detected: {temp_pair[0]}-{temp_pair[1]}'
+            cv2.line(frame, center_person, center_object, people_tracks[person_index]['color'], 2)
+    
+    
+        
+    return frame, relation_history, alert
 
 def detect_without_preprocess(image:np.ndarray, model:Model):
     """
