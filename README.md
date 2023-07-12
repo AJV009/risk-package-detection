@@ -56,8 +56,8 @@ _Note: Demo won't work without creating the optimized model._
 ## Huge thanks to:
 - To my sister for staying up late with me to test the demo and debug the detections. :heart:
 - DeepSORT library: [theAIGuysCode/yolov4-deepsort](https://github.com/theAIGuysCode/yolov4-deepsort)
-- The binding logic for DeepSORT and YOLO: [DeepSORT-YOLOv4-TensorRT-OpenVINO](https://github.com/MatPiech/DeepSORT-YOLOv4-TensorRT-OpenVINO)
-- Used as a base repo for inference: [YOLOv8-OpenVINO-Optimised](https://github.com/AJV009/YOLOv8-OpenVINO-Optimised)
+- The binding logic for DeepSORT and YOLO: [MatPiech/DeepSORT-YOLOv4-TensorRT-OpenVINO](https://github.com/MatPiech/DeepSORT-YOLOv4-TensorRT-OpenVINO)
+- Used as a base repo for inference: [AJV009/YOLOv8-OpenVINO-Optimised](https://github.com/AJV009/YOLOv8-OpenVINO-Optimised)
 
 ## Demo (CPU)
 
