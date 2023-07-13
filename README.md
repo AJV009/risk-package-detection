@@ -25,6 +25,7 @@ __Please note: The system's accuracy and effectiveness depend on the quality of 
 - Reuse the 'n' version of YOLOv8 and fix the consistency issue.
 - Improve the bounding box logic to keep boxes inside the frame.
 - Find a way for DeepSORT to deal with custom aspect ratios and sizes to deal with multi classes. (Use separate models for each class or use find a new technique altogether.)
+- Since the model used for DeepSORT called `mars-small128` is a TensorFlow model, we can convert it to OpenVINO IR format, add the preprocessing into the model and then also re-engineer or update the functions `extract_image_patch`, `create_box_encoder`, `ImageEncoderTF` and `_run_in_batches` in `utils.py` to be OpenVINO optimised using the latest updated libraries/helpers.
   
 Since the complexity of testing the whole implementation, I won't be able to patch all issues before the [Intel Chips' CHallenge - Detect Faster](https://events.hackster.io/chips-challenge/) deadline.
 
