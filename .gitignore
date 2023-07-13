@@ -5,3 +5,4 @@ __pycache__
 /models/*
 /datasets/*
 /runs/*
+log.txt
