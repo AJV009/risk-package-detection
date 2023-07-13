@@ -383,52 +383,72 @@ def get_distance(center1, center2):
     return np.sqrt((center1[0]-center2[0])**2 + (center1[1]-center2[1])**2)
 
 def track_risk(frame, deepsort_config, relation_history, confident_tracks):
+    alert = []
 
-    # Separate people and objects
     people_tracks = [track for track in confident_tracks if track['label'].startswith('person')]
     object_tracks = [track for track in confident_tracks if track['label'].startswith(tuple(deepsort_config['baggage_classes']))]
 
-    # Initialize cost matrix with size max(len(people_tracks), len(object_tracks))
     num_people = len(people_tracks)
     num_objects = len(object_tracks)
     cost_matrix = np.full((num_people, num_objects), np.inf)
 
-    # Calculate the cost for each potential pair
+    current_person_labels = [track['label'] for track in people_tracks]
+
     for i, person in enumerate(people_tracks):
         for j, obj in enumerate(object_tracks):
             center_person = get_center(person['bbox'])
             center_object = get_center(obj['bbox'])
-            cost_matrix[i][j] = get_distance(center_person, center_object)
+            temp_pair = (person['label'], obj['label'])
+            if temp_pair in relation_history:
+                cost_matrix[i][j] = get_distance(center_person, center_object) - deepsort_config['history_weight']
+            else:
+                cost_matrix[i][j] = get_distance(center_person, center_object)
 
-    alert = None
     alert_config = deepsort_config['alert_config']['unattended_bag']
-    # Use linear_sum_assignment to solve the assignment problem
-    if num_people > 0 and num_objects > 0:  # Make sure we have both people and objects
+
+    if num_people > 0 and num_objects > 0: 
         person_indices, object_indices = linear_sum_assignment(cost_matrix)
-        # Create pairs
         for person_index, object_index in zip(person_indices, object_indices):
             center_person = get_center(people_tracks[person_index]['bbox'])
             center_object = get_center(object_tracks[object_index]['bbox'])
-            # pairs.append((people_tracks[person_index], object_tracks[object_index], time.time()))
-            dist = np.sqrt((center_person[0]-center_object[0])**2 + (center_person[1]-center_object[1])**2)
+            dist = get_distance(center_person, center_object)
             temp_pair = (people_tracks[person_index]['label'], object_tracks[object_index]['label'])
             if temp_pair not in relation_history:
                 relation_history[temp_pair] = {
-                    'distance': dist,
-                    'last_seen': time.time()
+                    'distances': [dist],
+                    'timestamps': [time.time()]
                 }
+            elif dist < alert_config['pixel_distance_percent'] * frame.shape[1]:
+                if 'unattended_since' in relation_history[temp_pair]:
+                    alert.append(f'{datetime.now()}: Alert resolved: {temp_pair[0]}-{temp_pair[1]}')
+                    del relation_history[temp_pair]['unattended_since']
+                relation_history[temp_pair]['distances'].append(dist)
+                relation_history[temp_pair]['timestamps'].append(time.time())
             else:
-                current_time = time.time()
-                pixel_distance_percent = alert_config['pixel_distance_percent']
-                alert_duration = alert_config['alert_duration']
-                # log_output("relation_distance: "+str(relation_history[temp_pair]['distance']))
-                # log_output("Diff calc: "+str(pixel_distance_percent * frame.shape[1]))
-                if (current_time - relation_history[temp_pair]['last_seen'] > alert_duration) or (relation_history[temp_pair]['distance'] > pixel_distance_percent * frame.shape[1]):
-                    alert = f'{datetime.now()}: Unattended bag detected: {temp_pair[0]}-{temp_pair[1]}'
+                last_seen = max(relation_history[temp_pair]['timestamps'])
+                if time.time() - last_seen > alert_config['alert_duration']:
+                    if 'unattended_since' not in relation_history[temp_pair]:
+                        alert.append(f'{datetime.now()}: Unattended bag detected: {temp_pair[0]}-{temp_pair[1]}')
+                        relation_history[temp_pair]['unattended_since'] = time.time()
             cv2.line(frame, center_person, center_object, people_tracks[person_index]['color'], 2)
-    
-    
-        
+
+
+    for temp_pair in list(relation_history.keys()):
+        person_label, object_label = temp_pair
+        if person_label not in current_person_labels:
+            last_seen = max(relation_history[temp_pair]['timestamps'])
+            if time.time() - last_seen > alert_config['alert_duration']: 
+                if 'unattended_since' not in relation_history[temp_pair]:
+                    alert.append(f'{datetime.now()}: Unattended bag detected: {person_label}-{object_label}')
+                    relation_history[temp_pair]['unattended_since'] = time.time()
+                elif time.time() - relation_history[temp_pair]['unattended_since'] > alert_config['grace_period']:
+                    alert.append(f'{datetime.now()}: Bag exceeded grace period: {person_label}-{object_label}')
+
+    grace_period = alert_config['grace_period']
+    for temp_pair in list(relation_history.keys()):
+        if 'unattended_since' in relation_history[temp_pair] and time.time() - relation_history[temp_pair]['unattended_since'] > grace_period:
+            del relation_history[temp_pair]
+
     return frame, relation_history, alert
 
 def detect_without_preprocess(image:np.ndarray, model:Model):
