@@ -1,4 +1,4 @@
-# Threat Detection and Unattended Baggage Detection and Associated Person Tracking
+# Threat Detection and Unattended Baggage Detection with Associated Person Tracking
 __YOLOv8s + OpenVINO + DeepSORT__
 
 This is a demo of threat detection and unattended baggage tracking using YOLOv4s and DeepSORT. The model is trained on [COCO](https://cocodataset.org/#home) dataset and the weights are converted to OpenVINO format. The model is then used to detect threats and unattended baggage in a video stream. The detections are then tracked using DeepSORT.
