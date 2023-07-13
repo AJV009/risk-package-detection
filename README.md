@@ -4,9 +4,16 @@ __YOLOv8s + OpenVINO + DeepSORT__
 This is a demo of threat detection and unattended baggage tracking using YOLOv4s and DeepSORT. The model is trained on [COCO](https://cocodataset.org/#home) dataset and the weights are converted to OpenVINO format. The model is then used to detect threats and unattended baggage in a video stream. The detections are then tracked using DeepSORT.
 
 ## Features
-- Threat Detection - Detects `knife` and `scissor` classes.
-- Unattended Baggage Detection - Detects `lagguage`, `backpack` and `handbag` classes and creates a relationship between the detections to the closest `person` to track the unattended baggage.
-- Supports multiple persons and multiple unattended baggage tracking using __DeepSORT__.
+- **Threat Detection**: Identifies potential threats such as `knife` and `scissor` classes.
+- **Multiple Tracking**: Utilizes DeepSORT for tracking multiple persons and their associated baggages.
+- **Unattended Baggage Detection & Alerting**: Flags and alerts when a person moves away from their associated baggage beyond a set threshold distance and time.
+- **Alert Resolution**: Recognizes when an unattended baggage is claimed back by the associated person within a certain "grace period", and accordingly resolves the alert.
+- **Grace Period Exceeded Alert**: Issues an additional alert when an unattended baggage remains unclaimed beyond the grace period.
+- **Leaving Scene Management**: Handles situations where a person leaves the scene entirely, tracking and alerting on their unattended baggage.
+- **Historical Baggage Monitoring**: Keeps an eye on baggages left unattended in the frame for more than a set duration, even without an associated person present.
+- **Prevents Repeated Alerts**: Suppresses repeated alerts for the same unattended baggage until resolved, avoiding alert spam.
+
+__Please note: The system's accuracy and effectiveness depend on the quality of the object detection model, the configuration of thresholds and durations, and the clarity of the video feed.__
 
 ## Current limitations in this demo:
 - The bounding box logic isn't perfect and sometimes the bounding boxes just go outside the frame. (Which works but causes the centre points to be outside the frame and thus the tracking fails)
