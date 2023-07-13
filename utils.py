@@ -614,17 +614,10 @@ def extract_image_patch(image, bbox, patch_shape):
 
     """
     bbox = np.array(bbox)
-    if patch_shape is not None:
-        # correct aspect ratio to patch shape
-        target_aspect = float(patch_shape[1]) / patch_shape[0]
-        new_width = target_aspect * bbox[3]
-        bbox[0] -= (new_width - bbox[2]) / 2
-        bbox[2] = new_width
 
     # convert to top left, bottom right
     bbox[2:] += bbox[:2]
     bbox = bbox.astype(np.int)
-
     # clip at image boundaries
     bbox[:2] = np.maximum(0, bbox[:2])
     bbox[2:] = np.minimum(np.asarray(image.shape[:2][::-1]) - 1, bbox[2:])
@@ -632,6 +625,36 @@ def extract_image_patch(image, bbox, patch_shape):
         return None
     sx, sy, ex, ey = bbox
     image = image[sy:ey, sx:ex]
-    image = cv2.resize(image, tuple(patch_shape[::-1]))
+    # Preserve aspect ratio, resize the largest dimension to match the model's expected size.
+    scale = min(patch_shape[0] / image.shape[0], patch_shape[1] / image.shape[1])
+    image = cv2.resize(image, None, fx=scale, fy=scale)
+    # Pad the image to match the model's expected size.
+    pad_y = (patch_shape[0] - image.shape[0]) // 2
+    pad_x = (patch_shape[1] - image.shape[1]) // 2
+    image = np.pad(image, ((pad_y, patch_shape[0] - image.shape[0] - pad_y), (pad_x, patch_shape[1] - image.shape[1] - pad_x), (0, 0)), mode='constant')
+
     return image
+
+    # if patch_shape is not None:
+    #     # correct aspect ratio to patch shape
+    #     target_aspect = float(patch_shape[1]) / patch_shape[0]
+    #     new_width = target_aspect * bbox[3]
+    #     bbox[0] -= (new_width - bbox[2]) / 2
+    #     bbox[2] = new_width
+    # else:
+    #     patch_shape = np.round(bbox[2:]).astype(np.int)
+
+    # # convert to top left, bottom right
+    # bbox[2:] += bbox[:2]
+    # bbox = bbox.astype(np.int)
+
+    # # clip at image boundaries
+    # bbox[:2] = np.maximum(0, bbox[:2])
+    # bbox[2:] = np.minimum(np.asarray(image.shape[:2][::-1]) - 1, bbox[2:])
+    # if np.any(bbox[:2] >= bbox[2:]):
+    #     return None
+    # sx, sy, ex, ey = bbox
+    # image = image[sy:ey, sx:ex]
+    # image = cv2.resize(image, tuple(patch_shape[::-1]))
+    # return image
 
