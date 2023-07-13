@@ -1,7 +1,7 @@
 # Threat Detection and Unattended Baggage Detection with Associated Person Tracking
-__YOLOv8s + OpenVINO + DeepSORT__
+__YOLOv8s + OpenVINO + DeepSORT__: A demo of threat detection and unattended baggage tracking. 
 
-This is a demo of threat detection and unattended baggage tracking using YOLOv4s and DeepSORT. The model is trained on [COCO](https://cocodataset.org/#home) dataset and the weights are converted to OpenVINO format. The model is then used to detect threats and unattended baggage in a video stream. The detections are then tracked using DeepSORT.
+A [YOLOv8s](https://docs.ultralytics.com/tasks/detect/) is trained on [COCO](https://cocodataset.org) dataset and the weights are converted to OpenVINO format. The model is then used to detect threats and unattended baggage in a video stream. The detections are then tracked using DeepSORT.
 
 ## Features
 - **Threat Detection**: Identifies potential threats such as `knife` and `scissor` classes.
@@ -16,15 +16,15 @@ This is a demo of threat detection and unattended baggage tracking using YOLOv4s
 __Please note: The system's accuracy and effectiveness depend on the quality of the object detection model, the configuration of thresholds and durations, and the clarity of the video feed.__
 
 ## Current limitations in this demo:
-- The bounding box logic isn't perfect and sometimes the bounding boxes just go outside the frame. (Which works but causes the centre points to be outside the frame and thus the tracking fails)
-- Since the model was trained with COCO it's limited by the training data. (For example, it doesn't detect `gun` class because it wasn't in the training data or doesn't detect every kind of bag because all varieties of bags weren't in the training data)
-- We are using the `s` version of YOLOv8 because we were having trouble with keeping consistency across the frames. Please note the `n` version works just fine also it was 2x fast than `s` but it might not be as accurate as the `s` version.
+- The bounding box logic isn't perfect and sometimes the bounding boxes just go outside the frame. This can cause the centre points to be outside the frame and tracking to fail.
+- The model is limited by its training data (COCO dataset). It doesn't detect some classes (e.g., gun) because they weren't in the training data.
+- We are using the 's' version of YOLOv8 due to issues maintaining consistency across frames. While the 'n' version is faster, it may not be as accurate.
 
 ## How can it be improved:
-- Training the model on a custom dataset with the specific classes we want to detect. (`person`, `knife`, `scissor`, `lagguage`, `backpack`, `handbag` and `gun`)
-- Reusing the `n` version of YOLOv8 and fixing the consistency issue.
-- Using a better bounding box logic to keep the bounding boxes inside the frame. (Maybe fixing the patching code could possibly fix it.)
-- Custom train the DeepSORT model to improve the tracking.
+- Train the model on a custom dataset with specific classes we want to detect (e.g., person, knife, scissor, luggage, backpack, handbag, gun).
+- Reuse the 'n' version of YOLOv8 and fix the consistency issue.
+- Improve the bounding box logic to keep boxes inside the frame.
+- Find a way for DeepSORT to deal with custom aspect ratios and sizes to deal with multi classes. (Use separate models for each class or use find a new technique altogether.)
   
 Since the complexity of testing the whole implementation, I won't be able to patch all issues before the [Intel Chips' CHallenge - Detect Faster](https://events.hackster.io/chips-challenge/) deadline.
 
